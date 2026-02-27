@@ -1,0 +1,52 @@
+{
+  "name": "novaflow-vscode",
+  "displayName": "Novaflow",
+  "description": "AI-first development tool — view Novaflow inside VS Code",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "novaflow",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "novaflow.openPanel",
+        "title": "Open Novaflow",
+        "category": "Novaflow"
+      },
+      {
+        "command": "novaflow.startServer",
+        "title": "Start Novaflow Server",
+        "category": "Novaflow"
+      }
+    ],
+    "configuration": {
+      "title": "Novaflow",
+      "properties": {
+        "novaflow.serverPort": {
+          "type": "number",
+          "default": 3847,
+          "description": "Port where the Novaflow local server is running"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "dev": "npm run build -- --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.3",
+    "@vscode/vsce": "^3.2.2"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "projectName": "elemona",
+  "jira": {
+    "baseUrl": "https://myco.atlassian.net",
+    "email": "kostas.mamalis@lseg.com",
+    "apiToken": "123",
+    "defaultProject": "DMIB"
+  },
+  "gitlab": {
+    "baseUrl": "https://gitlab.com",
+    "personalAccessToken": "123",
+    "projectId": "app/app-51981",
+    "defaultBranch": "main",
+    "branchPrefix": "novaflow/",
+    "commitMessageTemplate": "{ticketId}: {summary}"
+  },
+  "permissions": {
+    "checkpoints": {
+      "afterBusinessAnalysis": false,
+      "beforeImplementation": false,
+      "beforeCommit": true
+    },
+    "allowAgentUncertaintyPause": true
+  },
+  "knowledgeBase": {
+    "documents": [],
+    "autoIngestOnStart": true
+  }
+}

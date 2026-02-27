@@ -1,0 +1,40 @@
+{
+  "name": "@novaflow/agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@novaflow/shared-types": "workspace:*",
+    "@langchain/core": "^1.1.28",
+    "@langchain/langgraph": "^1.1.5",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
+    "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "@langchain/anthropic": ">=1.0",
+    "@langchain/openai": ">=1.0",
+    "@langchain/ollama": ">=1.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/anthropic": { "optional": true },
+    "@langchain/openai": { "optional": true },
+    "@langchain/ollama": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.5",
+    "@langchain/anthropic": "^1.3.20"
+  }
+}

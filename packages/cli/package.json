@@ -1,0 +1,33 @@
+{
+  "name": "@novaflow/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "novaflow": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@novaflow/shared-types": "workspace:*",
+    "commander": "^12.1.0",
+    "@inquirer/prompts": "^7.2.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.1.1",
+    "execa": "^9.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.5"
+  }
+}
