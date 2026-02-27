@@ -62,12 +62,26 @@ export async function runInit(): Promise<void> {
       ? await password({ message: "API Key:" })
       : "";
 
-  const baseUrl =
-    provider === "azure-openai"
-      ? await input({ message: "Azure OpenAI base URL:" })
-      : provider === "ollama"
-        ? await input({ message: "Ollama URL:", default: "http://localhost:11434" })
-        : undefined;
+  const baseUrl = await (async () => {
+    if (provider === "azure-openai") {
+      return await input({ message: "Azure OpenAI base URL:" });
+    }
+    if (provider === "ollama") {
+      return await input({ message: "Ollama URL:", default: "http://localhost:11434" });
+    }
+    if (provider === "anthropic") {
+      const useAzure = await confirm({
+        message: "Accessing Claude via Azure AI Foundry?",
+        default: false,
+      });
+      if (useAzure) {
+        return await input({
+          message: "Azure AI Foundry endpoint (e.g. https://xxx.eastus.models.ai.azure.com):",
+        });
+      }
+    }
+    return undefined;
+  })();
 
   // ─── Server ────────────────────────────────────────────────────────────────
   const port = await input({

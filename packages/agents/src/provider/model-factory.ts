@@ -11,7 +11,12 @@ export async function createChatModel(config: NovaflowConfig): Promise<BaseChatM
   switch (provider) {
     case "anthropic": {
       const { ChatAnthropic } = await import("@langchain/anthropic");
-      return new ChatAnthropic({ model, apiKey, temperature });
+      return new ChatAnthropic({
+        model,
+        apiKey,
+        temperature,
+        ...(baseUrl ? { anthropicApiUrl: baseUrl } : {}),
+      });
     }
 
     case "openai": {
