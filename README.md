@@ -73,6 +73,91 @@ The status bar shows a **Novaflow** item in the bottom-right corner as a quick s
 
 ---
 
+## ChromaDB
+
+Novaflow uses [ChromaDB](https://docs.trychroma.com) as its vector database for the knowledge base.
+
+### Running ChromaDB
+
+**Docker / Podman (recommended)**
+
+```bash
+podman run -d \
+  --name chromadb \
+  -p 8000:8000 \
+  -v ~/.novaflow/chromadb:/chroma/chroma \
+  chromadb/chroma
+```
+
+Verify it is running:
+
+```bash
+curl http://localhost:8000/api/v2/heartbeat
+# → {"nanosecond heartbeat": ...}
+```
+
+To start it again after a reboot: `podman start chromadb`
+
+> **Version note:** ChromaDB 0.6 and above uses the `/api/v2` REST path. If you see a `"please use v2"` message in responses, you are on a recent version — this is expected and supported.
+
+---
+
+### Configuration
+
+Set the host and port in `~/.novaflow/config.json` under the `chromadb` key:
+
+```json
+{
+  "chromadb": {
+    "host": "localhost",
+    "port": 8000,
+    "collectionPrefix": "novaflow"
+  }
+}
+```
+
+The `novaflow init` wizard prompts for these values automatically.
+
+---
+
+### Dev container / remote development
+
+If you run Novaflow **inside a VS Code dev container**, `localhost` resolves to the container itself — not your host machine where ChromaDB is running. Use `host.docker.internal` instead:
+
+```json
+{
+  "chromadb": {
+    "host": "host.docker.internal",
+    "port": 8000,
+    "collectionPrefix": "novaflow"
+  }
+}
+```
+
+On Linux-based dev containers where `host.docker.internal` is not automatically available, find the host gateway IP:
+
+```bash
+# Inside the dev container
+ip route | grep default
+# → default via 172.17.0.1 ...  ← use this IP as the host
+```
+
+---
+
+### Persisting data
+
+The `-v ~/.novaflow/chromadb:/chroma/chroma` volume mount stores the vector database on your host machine. The data survives container restarts and image updates.
+
+To make ChromaDB start automatically on login (Linux / systemd):
+
+```bash
+podman generate systemd --new --name chromadb > ~/.config/systemd/user/chromadb.service
+systemctl --user daemon-reload
+systemctl --user enable --now chromadb
+```
+
+---
+
 ## Running a ticket
 
 ### From the UI

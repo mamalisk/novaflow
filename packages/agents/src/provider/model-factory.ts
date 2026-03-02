@@ -8,15 +8,26 @@ import type { NovaflowConfig } from "@novaflow/shared-types";
 export async function createChatModel(config: NovaflowConfig): Promise<BaseChatModel> {
   const { provider, model, apiKey, baseUrl, temperature = 0.2 } = config.ai;
 
+  // TODO: remove before release
+  console.log("[model-factory] provider:", provider);
+  console.log("[model-factory] model:", model);
+  console.log("[model-factory] baseUrl:", baseUrl ?? "(none)");
+  console.log("[model-factory] apiKey:", apiKey ? `${apiKey.slice(0, 6)}…(${apiKey.length} chars)` : "(empty)");
+
   switch (provider) {
     case "anthropic": {
       const { ChatAnthropic } = await import("@langchain/anthropic");
-      return new ChatAnthropic({
-        model,
-        apiKey,
-        temperature,
-        ...(baseUrl ? { anthropicApiUrl: baseUrl } : {}),
-      });
+      // When a baseUrl is set (e.g. Azure AI Foundry), Azure expects the key
+      // in the "api-key" header, not the Anthropic-standard "x-api-key".
+      const azureOptions = baseUrl ? {
+        anthropicApiUrl: baseUrl,
+        clientOptions: {
+          defaultHeaders: { "api-key": apiKey },
+        },
+      } : {};
+      console.log("[model-factory] anthropicApiUrl:", baseUrl ?? "(using default api.anthropic.com)");
+      console.log("[model-factory] azure api-key header:", baseUrl ? "yes" : "no");
+      return new ChatAnthropic({ model, apiKey, temperature, ...azureOptions });
     }
 
     case "openai": {
