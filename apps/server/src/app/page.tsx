@@ -33,6 +33,7 @@ interface StatusResult {
 
 export default function HomePage() {
   const [ticketId, setTicketId] = useState("");
+  const [additionalContext, setAdditionalContext] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<EventEntry[]>([]);
@@ -103,7 +104,10 @@ export default function HomePage() {
     const res = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jiraTicketId: ticketId.trim() }),
+      body: JSON.stringify({
+        jiraTicketId: ticketId.trim(),
+        additionalContext: additionalContext.trim() || undefined,
+      }),
     });
 
     if (!res.ok) {
@@ -154,6 +158,17 @@ export default function HomePage() {
             value={ticketId}
             onChange={(e) => setTicketId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && canStartRun && startRun()}
+            disabled={isRunning}
+          />
+          <label className={styles.label}>
+            Implementation Notes <span className={styles.labelOptional}>(optional)</span>
+          </label>
+          <textarea
+            className={styles.textarea}
+            rows={4}
+            placeholder="Constraints, architecture decisions, or context the agents should know about..."
+            value={additionalContext}
+            onChange={(e) => setAdditionalContext(e.target.value)}
             disabled={isRunning}
           />
           <button

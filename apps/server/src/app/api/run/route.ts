@@ -14,15 +14,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json() as { jiraTicketId?: string; figmaUrl?: string };
-    const { jiraTicketId, figmaUrl } = body;
+    const body = await req.json() as { jiraTicketId?: string; figmaUrl?: string; additionalContext?: string };
+    const { jiraTicketId, figmaUrl, additionalContext } = body;
 
     if (!jiraTicketId) {
       return NextResponse.json({ error: "jiraTicketId is required" }, { status: 400 });
     }
 
     const runId = randomUUID();
-    void startRun({ runId, jiraTicketId, figmaUrl });
+    void startRun({ runId, jiraTicketId, figmaUrl, additionalContext });
 
     return NextResponse.json({ runId });
   } catch (error) {

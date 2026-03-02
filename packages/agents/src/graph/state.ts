@@ -96,6 +96,10 @@ export const NovaflowState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => undefined,
   }),
+  additionalContext: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => "",
+  }),
 
   // Fetched data
   jiraTicket: Annotation<JiraTicket | null>({

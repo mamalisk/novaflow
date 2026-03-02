@@ -135,12 +135,19 @@ export async function startRun(params: {
   runId: string;
   jiraTicketId: string;
   figmaUrl?: string;
+  additionalContext?: string;
 }): Promise<void> {
   const graph = getCompiledGraph();
   const config = { configurable: { thread_id: params.runId } };
 
   const stream = await graph.stream(
-    { runId: params.runId, jiraTicketId: params.jiraTicketId, figmaUrl: params.figmaUrl, status: "running" },
+    {
+      runId: params.runId,
+      jiraTicketId: params.jiraTicketId,
+      figmaUrl: params.figmaUrl,
+      additionalContext: params.additionalContext ?? "",
+      status: "running",
+    },
     { ...config, streamMode: "values" }
   );
 

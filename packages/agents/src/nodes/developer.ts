@@ -72,7 +72,7 @@ Affected Components:
 {affectedComponents}
 
 Automated Tests to Pass:
-{automatedTests}
+{automatedTests}{additionalContext}
 
 Provide the complete implementation.`,
         ],
@@ -87,6 +87,9 @@ Provide the complete implementation.`,
         automatedTests: state.testPlanOutput.automatedTests
           .map((t) => `- ${t.name}: ${t.description}`)
           .join("\n"),
+        additionalContext: state.additionalContext
+          ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+          : "",
       }) as z.infer<typeof ImplementationSchema>;
 
       // If agent is uncertain AND the project allows uncertainty pauses, interrupt

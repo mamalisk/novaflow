@@ -58,11 +58,15 @@ Acceptance Criteria: {acceptanceCriteria}
 Priority: {priority}
 Labels: {labels}
 Components: {components}
-Figma URL: {figmaUrl}`,
+Figma URL: {figmaUrl}{additionalContext}`,
         ],
       ]);
 
       const chain = prompt.pipe(llm.withStructuredOutput(BAOutputSchema));
+
+      const contextSection = state.additionalContext
+        ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+        : "";
 
       const result = await chain.invoke({
         ticketId: state.jiraTicket.id,
@@ -73,6 +77,7 @@ Figma URL: {figmaUrl}`,
         labels: state.jiraTicket.labels.join(", "),
         components: state.jiraTicket.components.join(", "),
         figmaUrl: state.figmaUrl ?? "None provided",
+        additionalContext: contextSection,
       }) as BAOutput;
 
       emitAgentEvent(state.runId, {

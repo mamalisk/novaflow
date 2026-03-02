@@ -60,7 +60,7 @@ export function createTestAnalystNode(llm: BaseChatModel) {
 Summary: {summary}
 Acceptance Criteria: {acceptanceCriteria}
 Affected Components: {affectedComponents}
-Risks: {risks}`,
+Risks: {risks}{additionalContext}`,
         ],
       ]);
 
@@ -71,6 +71,9 @@ Risks: {risks}`,
         acceptanceCriteria: state.baOutput.acceptanceCriteria.join("\n"),
         affectedComponents: state.baOutput.affectedComponents.join(", "),
         risks: state.baOutput.risks.join("\n"),
+        additionalContext: state.additionalContext
+          ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+          : "",
       }) as TestPlanOutput;
 
       emitAgentEvent(state.runId, {
