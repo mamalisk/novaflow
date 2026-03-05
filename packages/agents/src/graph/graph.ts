@@ -11,6 +11,7 @@ import { createDevOpsNode } from "../nodes/devops.js";
 import { createPlaywrightRunnerNode } from "../nodes/playwright-runner.js";
 import { createReportGeneratorNode } from "../nodes/report-generator.js";
 import { emitAgentEvent } from "./event-bus.js";
+import { writeRunReport } from "./run-reporter.js";
 import type { NovaflowProjectConfig } from "@novaflow/shared-types";
 
 // ─── Checkpoint gate node factory ────────────────────────────────────────────
@@ -151,8 +152,21 @@ export async function startRun(params: {
     { ...config, streamMode: "values" }
   );
 
-  for await (const _chunk of stream) {
-    // Events are broadcast via agentEventBus inside each node
+  try {
+    for await (const _chunk of stream) {
+      // Events are broadcast via agentEventBus inside each node
+    }
+  } catch (err) {
+    emitAgentEvent(params.runId, { type: "run:failed", error: String(err) });
+  } finally {
+    try {
+      const finalState = await graph.getState(config);
+      if (finalState.next.length === 0) {
+        writeRunReport(finalState.values as NovaflowStateType);
+      }
+    } catch {
+      // state read failed — skip report
+    }
   }
 }
 
@@ -168,7 +182,20 @@ export async function resumeRun(
     streamMode: "values",
   });
 
-  for await (const _chunk of stream) {
-    // Events continue flowing via agentEventBus
+  try {
+    for await (const _chunk of stream) {
+      // Events continue flowing via agentEventBus
+    }
+  } catch (err) {
+    emitAgentEvent(runId, { type: "run:failed", error: String(err) });
+  } finally {
+    try {
+      const finalState = await graph.getState(config);
+      if (finalState.next.length === 0) {
+        writeRunReport(finalState.values as NovaflowStateType);
+      }
+    } catch {
+      // state read failed — skip report
+    }
   }
 }
