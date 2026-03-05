@@ -4,8 +4,10 @@
   overflow: hidden;
 }
 
+/* ─── Sidebar ──────────────────────────────────────────────────────────────── */
+
 .sidebar {
-  width: 280px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--bg-surface);
   border-right: 1px solid var(--border);
@@ -22,7 +24,7 @@
   letter-spacing: -0.5px;
 }
 
-.status {
+.wsStatus {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -46,94 +48,12 @@
   flex-shrink: 0;
 }
 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-
-.labelMuted {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.input {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: var(--text);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.input:focus {
-  border-color: var(--accent);
-}
-
-.input:disabled {
-  opacity: 0.5;
-}
-
-.textarea {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  outline: none;
-  transition: border-color 0.15s;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.textarea:focus {
-  border-color: var(--accent);
-}
-
-.textarea:disabled {
-  opacity: 0.5;
-}
-
-.labelOptional {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-
-.button {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 9px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.button:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.dotYellow {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
 }
 
 .runId {
@@ -142,83 +62,17 @@
   gap: 4px;
 }
 
+.labelMuted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .code {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
 }
 
-/* Main area */
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Checkpoint banner */
-.checkpointBanner {
-  background: #1a1500;
-  border-bottom: 2px solid var(--warning);
-  padding: 16px 20px;
-  flex-shrink: 0;
-}
-
-.checkpointTitle {
-  font-weight: 700;
-  color: var(--warning);
-  margin-bottom: 8px;
-}
-
-.checkpointBody {
-  max-height: 200px;
-  overflow: auto;
-  margin-bottom: 12px;
-}
-
-.checkpointPayload {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-}
-
-.checkpointActions {
-  display: flex;
-  gap: 8px;
-}
-
-.buttonApprove {
-  background: var(--success);
-  color: #000;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.buttonApprove:hover {
-  opacity: 0.85;
-}
-
-.buttonReject {
-  background: var(--error);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.buttonReject:hover {
-  opacity: 0.85;
-}
-
-/* Nav link */
 .navLink {
   font-size: 12px;
   color: var(--text-muted);
@@ -230,7 +84,8 @@
   color: var(--accent);
 }
 
-/* Connection status panel */
+/* ─── Connection status panel ─────────────────────────────────────────────── */
+
 .statusPanel {
   border-top: 1px solid var(--border);
   padding-top: 16px;
@@ -294,25 +149,93 @@
   white-space: nowrap;
 }
 
-.dotYellow {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--warning);
-  flex-shrink: 0;
+/* ─── Main area ───────────────────────────────────────────────────────────── */
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
+/* Not-ready banner */
 .notReadyBanner {
   background: #1a0a00;
   border: 1px solid var(--warning);
   border-radius: 6px;
+  margin: 12px 16px 0;
   padding: 10px 14px;
   font-size: 12px;
   color: var(--warning);
   line-height: 1.5;
+  flex-shrink: 0;
 }
 
-/* Event log */
+/* ─── Checkpoint banner ───────────────────────────────────────────────────── */
+
+.checkpointBanner {
+  background: #1a1500;
+  border-bottom: 2px solid var(--warning);
+  padding: 16px 20px;
+  flex-shrink: 0;
+}
+
+.checkpointTitle {
+  font-weight: 700;
+  color: var(--warning);
+  margin-bottom: 8px;
+}
+
+.checkpointBody {
+  max-height: 200px;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+
+.checkpointPayload {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.checkpointActions {
+  display: flex;
+  gap: 8px;
+}
+
+.buttonApprove {
+  background: var(--success);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.buttonApprove:hover {
+  opacity: 0.85;
+}
+
+.buttonReject {
+  background: var(--error);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.buttonReject:hover {
+  opacity: 0.85;
+}
+
+/* ─── Event log ───────────────────────────────────────────────────────────── */
+
 .eventLog {
   flex: 1;
   overflow-y: auto;
@@ -327,4 +250,213 @@
   margin-top: 80px;
   font-size: 14px;
   line-height: 1.7;
+}
+
+/* ─── Compose bar ─────────────────────────────────────────────────────────── */
+
+.composeBar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+/* Expanded markdown editor panel */
+.composeEditor {
+  display: flex;
+  flex-direction: column;
+  height: 260px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.specsLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.tabGroup {
+  display: flex;
+  gap: 2px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tabActive {
+  background: var(--bg-elevated);
+  border: none;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.specsTextarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  resize: none;
+}
+
+.specsTextarea:disabled {
+  opacity: 0.5;
+}
+
+.specsPreview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.specsPreview h1,
+.specsPreview h2,
+.specsPreview h3 {
+  color: var(--text);
+  margin: 12px 0 6px;
+}
+
+.specsPreview p {
+  margin: 0 0 8px;
+}
+
+.specsPreview code {
+  background: var(--bg-elevated);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.specsPreview ul,
+.specsPreview ol {
+  padding-left: 20px;
+  margin: 0 0 8px;
+}
+
+.specsPreviewEmpty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Bottom input row */
+.composeInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+}
+
+.ticketInput {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+
+.ticketInput:focus {
+  border-color: var(--accent);
+}
+
+.ticketInput:disabled {
+  opacity: 0.5;
+}
+
+.specToggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.specToggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.specToggleActive {
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

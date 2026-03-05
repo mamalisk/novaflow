@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { marked } from "marked";
 import { io, type Socket } from "socket.io-client";
 import type {
   NovaflowEvent,
@@ -34,6 +35,8 @@ interface StatusResult {
 export default function HomePage() {
   const [ticketId, setTicketId] = useState("");
   const [additionalContext, setAdditionalContext] = useState("");
+  const [specsOpen, setSpecsOpen] = useState(false);
+  const [specsMode, setSpecsMode] = useState<"edit" | "preview">("edit");
   const [runId, setRunId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<EventEntry[]>([]);
@@ -141,43 +144,12 @@ export default function HomePage() {
 
   return (
     <div className={styles.shell}>
-      {/* Sidebar */}
+      {/* Sidebar — logo, nav, connection status */}
       <aside className={styles.sidebar}>
         <div className={styles.logo}>Novaflow</div>
-        <div className={styles.status}>
+        <div className={styles.wsStatus}>
           <span className={connected ? styles.dotGreen : styles.dotRed} />
           {connected ? "Connected" : "Disconnected"}
-        </div>
-
-        <div className={styles.form}>
-          <label className={styles.label}>JIRA Ticket ID</label>
-          <input
-            className={styles.input}
-            type="text"
-            placeholder="PROJ-123"
-            value={ticketId}
-            onChange={(e) => setTicketId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && canStartRun && startRun()}
-            disabled={isRunning}
-          />
-          <label className={styles.label}>
-            Implementation Notes <span className={styles.labelOptional}>(optional)</span>
-          </label>
-          <textarea
-            className={styles.textarea}
-            rows={4}
-            placeholder="Constraints, architecture decisions, or context the agents should know about..."
-            value={additionalContext}
-            onChange={(e) => setAdditionalContext(e.target.value)}
-            disabled={isRunning}
-          />
-          <button
-            className={styles.button}
-            onClick={startRun}
-            disabled={!canStartRun}
-          >
-            {isRunning ? "Running..." : "Start Run"}
-          </button>
         </div>
 
         {runId && (
@@ -187,12 +159,10 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Knowledge base link */}
         <Link href="/knowledge" className={styles.navLink}>
           Knowledge Base →
         </Link>
 
-        {/* Connection status */}
         <ConnectionStatusPanel
           status={status}
           loading={statusLoading}
@@ -200,7 +170,7 @@ export default function HomePage() {
         />
       </aside>
 
-      {/* Main content */}
+      {/* Main — event log + sticky compose bar */}
       <main className={styles.main}>
         {/* Not-ready banner */}
         {status && !status.graphInitialized && (
@@ -242,12 +212,85 @@ export default function HomePage() {
         <div className={styles.eventLog} ref={eventLogRef}>
           {events.length === 0 && (
             <div className={styles.emptyState}>
-              Enter a JIRA ticket ID and press <strong>Start Run</strong> to begin.
+              Enter a JIRA ticket ID and press <strong>Start Run →</strong> to begin.
             </div>
           )}
           {events.map(({ id, event, timestamp }) => (
             <EventRow key={id} event={event} timestamp={timestamp} />
           ))}
+        </div>
+
+        {/* Compose bar — sticky bottom */}
+        <div className={styles.composeBar}>
+          {specsOpen && (
+            <div className={styles.composeEditor}>
+              <div className={styles.tabBar}>
+                <span className={styles.specsLabel}>Additional Specifications</span>
+                <div className={styles.tabGroup}>
+                  <button
+                    className={specsMode === "edit" ? styles.tabActive : styles.tab}
+                    onClick={() => setSpecsMode("edit")}
+                    type="button"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className={specsMode === "preview" ? styles.tabActive : styles.tab}
+                    onClick={() => setSpecsMode("preview")}
+                    type="button"
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+              {specsMode === "edit" ? (
+                <textarea
+                  className={styles.specsTextarea}
+                  value={additionalContext}
+                  onChange={(e) => setAdditionalContext(e.target.value)}
+                  placeholder="Business rules, testing requirements, architecture constraints, or any other context for the agents…"
+                  disabled={isRunning}
+                  spellCheck={false}
+                />
+              ) : (
+                <div className={styles.specsPreview}>
+                  {additionalContext ? (
+                    <div
+                      dangerouslySetInnerHTML={{ __html: marked(additionalContext) as string }}
+                    />
+                  ) : (
+                    <p className={styles.specsPreviewEmpty}>Nothing to preview yet.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          <div className={styles.composeInput}>
+            <input
+              className={styles.ticketInput}
+              type="text"
+              placeholder="PROJ-123"
+              value={ticketId}
+              onChange={(e) => setTicketId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && canStartRun && void startRun()}
+              disabled={isRunning}
+            />
+            <button
+              className={specsOpen ? styles.specToggleActive : styles.specToggle}
+              onClick={() => setSpecsOpen((o) => !o)}
+              type="button"
+              title="Additional Specifications"
+            >
+              {specsOpen ? "▲ Specs" : "✦ Specs"}
+            </button>
+            <button
+              className={styles.button}
+              onClick={() => void startRun()}
+              disabled={!canStartRun}
+            >
+              {isRunning ? "Running…" : "Start Run →"}
+            </button>
+          </div>
         </div>
       </main>
     </div>

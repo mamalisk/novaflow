@@ -72,7 +72,7 @@ Risks: {risks}{additionalContext}`,
         affectedComponents: state.baOutput.affectedComponents.join(", "),
         risks: state.baOutput.risks.join("\n"),
         additionalContext: state.additionalContext
-          ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+          ? `\n\nAdditional Specifications:\n${state.additionalContext}`
           : "",
       }) as TestPlanOutput;
 

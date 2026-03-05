@@ -47,7 +47,7 @@ export function createDevOpsNode(llm: BaseChatModel) {
           "human",
           `Implementation summary: {summary}
 Changed files: {changedFiles}
-BA noted DevOps requirement: {requiresDevOps}
+BA noted DevOps requirement: {requiresDevOps}{additionalContext}
 
 Review and provide any necessary pipeline changes.`,
         ],
@@ -59,6 +59,9 @@ Review and provide any necessary pipeline changes.`,
         summary: state.implementationOutput?.summary ?? "",
         changedFiles: state.implementationOutput?.changes.map((c) => c.path).join(", ") ?? "",
         requiresDevOps: String(state.requiresDevOps),
+        additionalContext: state.additionalContext
+          ? `\n\nAdditional Specifications:\n${state.additionalContext}`
+          : "",
       }) as z.infer<typeof DevOpsSchema>;
 
       const fileChanges: FileChange[] = [];

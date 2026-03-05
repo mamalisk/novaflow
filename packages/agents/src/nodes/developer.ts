@@ -88,7 +88,7 @@ Provide the complete implementation.`,
           .map((t) => `- ${t.name}: ${t.description}`)
           .join("\n"),
         additionalContext: state.additionalContext
-          ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+          ? `\n\nAdditional Specifications:\n${state.additionalContext}`
           : "",
       }) as z.infer<typeof ImplementationSchema>;
 

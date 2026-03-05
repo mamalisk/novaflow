@@ -65,7 +65,7 @@ Figma URL: {figmaUrl}{additionalContext}`,
       const chain = prompt.pipe(llm.withStructuredOutput(BAOutputSchema));
 
       const contextSection = state.additionalContext
-        ? `\n\nAdditional Considerations:\n${state.additionalContext}`
+        ? `\n\nAdditional Specifications:\n${state.additionalContext}`
         : "";
 
       const result = await chain.invoke({
