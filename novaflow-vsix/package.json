@@ -1,0 +1,125 @@
+{
+  "name": "novaflow-vsix",
+  "displayName": "Novaflow",
+  "description": "AI-powered JIRA-to-code agent — self-contained VS Code extension",
+  "version": "0.1.0",
+  "publisher": "novaflow",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "novaflow.open",      "title": "Novaflow: Open" },
+      { "command": "novaflow.configure", "title": "Novaflow: Configure API Keys" }
+    ],
+    "configuration": {
+      "title": "Novaflow",
+      "properties": {
+        "novaflow.ai.provider": {
+          "type": "string",
+          "enum": ["anthropic", "openai", "azure-openai", "ollama"],
+          "default": "anthropic",
+          "description": "AI provider"
+        },
+        "novaflow.ai.model": {
+          "type": "string",
+          "default": "claude-opus-4-6",
+          "description": "Model name / deployment name"
+        },
+        "novaflow.ai.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom endpoint (Azure AI Foundry or Ollama)"
+        },
+        "novaflow.ai.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "LLM temperature"
+        },
+        "novaflow.jira.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "JIRA base URL (e.g. https://myorg.atlassian.net)"
+        },
+        "novaflow.jira.email": {
+          "type": "string",
+          "default": "",
+          "description": "JIRA account email"
+        },
+        "novaflow.jira.project": {
+          "type": "string",
+          "default": "",
+          "description": "Default JIRA project key (e.g. PROJ)"
+        },
+        "novaflow.gitlab.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "GitLab base URL"
+        },
+        "novaflow.gitlab.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "GitLab project ID"
+        },
+        "novaflow.gitlab.defaultBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Default base branch"
+        },
+        "novaflow.chromadb.host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "ChromaDB host"
+        },
+        "novaflow.chromadb.port": {
+          "type": "number",
+          "default": 8000,
+          "description": "ChromaDB port"
+        },
+        "novaflow.checkpoints.afterBA": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pause for human approval after business analysis"
+        },
+        "novaflow.checkpoints.beforeImpl": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pause for human approval before implementation"
+        },
+        "novaflow.checkpoints.beforeCommit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pause for human approval before committing"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "npm run build && vsce package"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "^1.3.20",
+    "@langchain/core": "^1.1.28",
+    "@langchain/langgraph": "^1.1.5",
+    "@langchain/ollama": "^1.0.0",
+    "@langchain/openai": "^1.0.0",
+    "marked": "^15.0.0",
+    "sql.js": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.9",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}
