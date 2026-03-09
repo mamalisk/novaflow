@@ -19,6 +19,8 @@ interface StatusResult {
   ai: IntegrationStatus;
   jira: IntegrationStatus;
   gitlab: IntegrationStatus;
+  /** ChromaDB is optional — shown as neutral/grey when unavailable, never red */
+  chromadb: IntegrationStatus;
 }
 
 interface KbFile {
@@ -356,11 +358,13 @@ function StatusPanel({
   status: StatusResult | null;
   onRefresh: () => void;
 }) {
-  const integrations: Array<{ key: keyof Omit<StatusResult, "graphInitialized">; label: string }> = [
+  const integrations: Array<{ key: keyof Omit<StatusResult, "graphInitialized" | "chromadb">; label: string }> = [
     { key: "ai", label: "AI" },
     { key: "jira", label: "JIRA" },
     { key: "gitlab", label: "GitLab" },
   ];
+
+  const chromadb = status?.chromadb;
 
   return (
     <div style={styles.statusPanel}>
@@ -389,6 +393,19 @@ function StatusPanel({
           </div>
         );
       })}
+
+      {/* ChromaDB — optional, neutral rendering when unavailable */}
+      <div style={styles.statusRow}>
+        <span style={{
+          ...styles.dot,
+          background: !chromadb ? "#444" : chromadb.ok ? "#4ade80" : "#444",
+          border: chromadb?.ok ? "none" : "1px solid #555",
+        }} />
+        <span style={{ ...styles.statusName, width: "52px" }}>Chroma</span>
+        <span style={{ color: chromadb?.ok ? "#4ade80" : "#555", fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: chromadb?.ok ? "normal" : "italic" }} title={chromadb?.message}>
+          {!chromadb ? "checking…" : chromadb.ok ? chromadb.message : "not used"}
+        </span>
+      </div>
 
       <button
         style={{ marginTop: "12px", ...styles.specToggle, width: "100%", textAlign: "center" }}

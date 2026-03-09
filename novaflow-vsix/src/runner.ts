@@ -3,13 +3,14 @@ import * as path from "path";
 import * as fs from "fs";
 import { SqlJsCheckpointer } from "./graph/checkpointer.js";
 import { buildGraph, startRun, resumeRun, type CompiledGraph } from "./graph/graph.js";
+import { KnowledgeBase } from "./graph/knowledge-base.js";
 import { agentEventBus } from "./graph/event-bus.js";
 import { createChatModel } from "./provider/model-factory.js";
-import { buildConfig, checkIntegrations } from "./config.js";
+import { buildConfig, checkIntegrations, checkChromaDB } from "./config.js";
 import type { NovaflowEvent } from "./types/index.js";
 
 export interface KbFile {
-  name: string;   // filename without .md
+  name: string;     // filename without .md
   filename: string; // full filename e.g. architecture.md
 }
 
@@ -57,6 +58,8 @@ export interface StatusResult {
   ai: { ok: boolean; message: string };
   jira: { ok: boolean; message: string };
   gitlab: { ok: boolean; message: string };
+  /** ChromaDB is optional — ok:false is neutral, not an error */
+  chromadb: { ok: boolean; message: string };
 }
 
 function getWorkspaceRoot(): string {
@@ -87,6 +90,7 @@ function listKbFiles(): KbFile[] {
 /** Manages the compiled LangGraph graph and bridges events to the webview panel. */
 export class NovaflowRunner {
   private graph: CompiledGraph | null = null;
+  private kb: KnowledgeBase | null = null;
   private panel: vscode.WebviewPanel | null = null;
   private activeRunId: string | null = null;
   private context: vscode.ExtensionContext;
@@ -108,6 +112,8 @@ export class NovaflowRunner {
     ensureKbDir();
     // Send initial KB file list
     this.sendKbList();
+    // Ingest current KB files into ChromaDB (if available)
+    this.ingestKb().catch(() => {});
   }
 
   clearPanel(): void {
@@ -123,12 +129,23 @@ export class NovaflowRunner {
       const wasmPath = path.join(this.context.extensionPath, "dist", "sql-wasm.wasm");
       const dbPath = path.join(this.context.globalStorageUri.fsPath, "novaflow.sqlite");
 
-      const [llm, checkpointer] = await Promise.all([
+      const [llm, checkpointer, kb] = await Promise.all([
         createChatModel(globalConfig),
         SqlJsCheckpointer.create(dbPath, wasmPath),
+        KnowledgeBase.create(
+          globalConfig.chromadb.host,
+          globalConfig.chromadb.port,
+          globalConfig.chromadb.collectionPrefix
+        ),
       ]);
 
-      this.graph = buildGraph(llm, projectConfig, checkpointer);
+      this.kb = kb;
+      this.graph = buildGraph(llm, projectConfig, checkpointer, kb);
+
+      // Ingest KB files if ChromaDB is available
+      if (kb) {
+        this.ingestKb().catch(() => {});
+      }
 
       // Refresh status after successful init
       await this.refreshStatus();
@@ -143,10 +160,14 @@ export class NovaflowRunner {
       const { global: globalConfig, project: projectConfig } = await buildConfig(
         this.context.secrets
       );
-      const integrations = await checkIntegrations(globalConfig, projectConfig);
+      const [integrations, chromadb] = await Promise.all([
+        checkIntegrations(globalConfig, projectConfig),
+        checkChromaDB(globalConfig),
+      ]);
       this.statusCache = {
         graphInitialized: this.graph !== null,
         ...integrations,
+        chromadb,
       };
     } catch {
       this.statusCache = {
@@ -154,6 +175,7 @@ export class NovaflowRunner {
         ai: { ok: false, message: "Error" },
         jira: { ok: false, message: "Error" },
         gitlab: { ok: false, message: "Error" },
+        chromadb: { ok: false, message: "Error" },
       };
     }
     return this.statusCache;
@@ -165,7 +187,16 @@ export class NovaflowRunner {
       ai: { ok: false, message: "Checking…" },
       jira: { ok: false, message: "Checking…" },
       gitlab: { ok: false, message: "Checking…" },
+      chromadb: { ok: false, message: "Checking…" },
     };
+  }
+
+  /** Ingest all current KB files into ChromaDB. No-op if KB unavailable. */
+  private async ingestKb(): Promise<void> {
+    if (!this.kb) return;
+    const files = listKbFiles();
+    if (files.length === 0) return;
+    await this.kb.ingestKbFiles(getKbDir(), files.map((f) => f.filename));
   }
 
   async handleMessage(msg: Record<string, unknown>): Promise<void> {
@@ -195,7 +226,8 @@ export class NovaflowRunner {
             jiraTicketId: msg.ticketId as string,
             additionalContext: (msg.additionalContext as string | undefined) ?? undefined,
           },
-          workspaceRoot
+          workspaceRoot,
+          this.kb
         );
         break;
       }
@@ -209,7 +241,8 @@ export class NovaflowRunner {
           this.graph,
           this.activeRunId,
           msg.decision as { action: "approved" | "rejected" | "modified" },
-          workspaceRoot
+          workspaceRoot,
+          this.kb
         );
         break;
       }
@@ -247,6 +280,8 @@ export class NovaflowRunner {
         // Open the file in the VS Code editor
         await vscode.window.showTextDocument(vscode.Uri.file(filePath));
         this.sendKbList();
+        // Re-ingest updated KB into ChromaDB
+        this.ingestKb().catch(() => {});
         break;
       }
 
@@ -269,6 +304,8 @@ export class NovaflowRunner {
         );
         if (answer === "Delete" && fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
+          // Remove from ChromaDB too
+          this.kb?.deleteKbFile(filename).catch(() => {});
         }
         this.sendKbList();
         break;

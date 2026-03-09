@@ -2,6 +2,7 @@ import { StateGraph, START, END, interrupt, Command } from "@langchain/langgraph
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { NovaflowState, type NovaflowStateType } from "./state.js";
 import { SqlJsCheckpointer } from "./checkpointer.js";
+import { KnowledgeBase } from "./knowledge-base.js";
 import { createFetchJiraNode } from "../nodes/fetch-jira.js";
 import { createBusinessAnalystNode } from "../nodes/business-analyst.js";
 import { createTestAnalystNode } from "../nodes/test-analyst.js";
@@ -12,6 +13,29 @@ import { createReportGeneratorNode } from "../nodes/report-generator.js";
 import { emitAgentEvent } from "./event-bus.js";
 import { writeRunReport } from "./run-reporter.js";
 import type { NovaflowProjectConfig } from "../types/index.js";
+
+// ─── KB context node ──────────────────────────────────────────────────────────
+
+function createFetchKbContextNode(kb: KnowledgeBase | null) {
+  return async function fetchKbContextNode(
+    state: NovaflowStateType
+  ): Promise<Partial<NovaflowStateType>> {
+    if (!kb || !state.jiraTicket) return { kbContext: "" };
+
+    const queryText = `${state.jiraTicket.summary}\n${state.jiraTicket.description}`.slice(0, 2000);
+
+    const [kbDocs, runMemory] = await Promise.all([
+      kb.queryKb(queryText, 5).catch(() => ""),
+      kb.queryRunMemory(queryText, 3).catch(() => ""),
+    ]);
+
+    const parts: string[] = [];
+    if (kbDocs) parts.push(`## Project Knowledge Base\n\n${kbDocs}`);
+    if (runMemory) parts.push(`## Previous Run Context\n\n${runMemory}`);
+
+    return { kbContext: parts.join("\n\n") };
+  };
+}
 
 // ─── Checkpoint gate node factory ────────────────────────────────────────────
 
@@ -55,12 +79,14 @@ function getCheckpointPayload(state: NovaflowStateType, gate: string): unknown {
 export function buildGraph(
   llm: BaseChatModel,
   projectConfig: NovaflowProjectConfig,
-  checkpointer: SqlJsCheckpointer
+  checkpointer: SqlJsCheckpointer,
+  kb: KnowledgeBase | null = null
 ) {
   const { checkpoints } = projectConfig.permissions;
 
   const graph = new StateGraph(NovaflowState)
     .addNode("fetchJira", createFetchJiraNode(projectConfig))
+    .addNode("fetchKbContext", createFetchKbContextNode(kb))
     .addNode("businessAnalyst", createBusinessAnalystNode(llm))
     .addNode("baApprovalGate", makeCheckpointGate("post-ba", checkpoints.afterBusinessAnalysis))
     .addNode("testAnalyst", createTestAnalystNode(llm))
@@ -72,7 +98,8 @@ export function buildGraph(
     .addNode("reportGenerator", createReportGeneratorNode())
 
     .addEdge(START, "fetchJira")
-    .addEdge("fetchJira", "businessAnalyst")
+    .addEdge("fetchJira", "fetchKbContext")
+    .addEdge("fetchKbContext", "businessAnalyst")
     .addEdge("businessAnalyst", "baApprovalGate")
     .addConditionalEdges("baApprovalGate", (s) =>
       s.checkpointDecision === "rejected" ? "businessAnalyst" : "testAnalyst"
@@ -101,7 +128,8 @@ export type CompiledGraph = ReturnType<typeof buildGraph>;
 export async function startRun(
   graph: CompiledGraph,
   params: { runId: string; jiraTicketId: string; figmaUrl?: string; additionalContext?: string },
-  workspaceRoot: string
+  workspaceRoot: string,
+  kb: KnowledgeBase | null = null
 ): Promise<void> {
   const config = { configurable: { thread_id: params.runId } };
 
@@ -127,6 +155,10 @@ export async function startRun(
       const finalState = await graph.getState(config);
       if (finalState.next.length === 0) {
         writeRunReport(finalState.values as NovaflowStateType, workspaceRoot);
+        // Index run summary in ChromaDB for future runs to learn from
+        if (kb) {
+          indexRunSummary(kb, finalState.values as NovaflowStateType).catch(() => {});
+        }
       }
     } catch {
       // state read failed — skip report
@@ -138,7 +170,8 @@ export async function resumeRun(
   graph: CompiledGraph,
   runId: string,
   decision: { action: "approved" | "rejected" | "modified"; payload?: unknown },
-  workspaceRoot: string
+  workspaceRoot: string,
+  kb: KnowledgeBase | null = null
 ): Promise<void> {
   const config = { configurable: { thread_id: runId } };
 
@@ -158,9 +191,31 @@ export async function resumeRun(
       const finalState = await graph.getState(config);
       if (finalState.next.length === 0) {
         writeRunReport(finalState.values as NovaflowStateType, workspaceRoot);
+        if (kb) {
+          indexRunSummary(kb, finalState.values as NovaflowStateType).catch(() => {});
+        }
       }
     } catch {
       // state read failed — skip report
     }
   }
+}
+
+// ─── Post-run KB indexing ─────────────────────────────────────────────────────
+
+async function indexRunSummary(kb: KnowledgeBase, state: NovaflowStateType): Promise<void> {
+  if (!state.implementationOutput) return;
+
+  const lines = [
+    `JIRA: ${state.jiraTicketId}`,
+    `Summary: ${state.baOutput?.summary ?? ""}`,
+    `Affected components: ${state.baOutput?.affectedComponents?.join(", ") ?? ""}`,
+    `Implementation: ${state.implementationOutput.summary}`,
+    `Files changed: ${state.implementationOutput.changes.map((c) => c.path).join(", ")}`,
+    state.testResults
+      ? `Tests: ${state.testResults.passed}/${state.testResults.passed + state.testResults.failed} passed`
+      : "",
+  ].filter(Boolean);
+
+  await kb.indexRunSummary(state.runId, lines.join("\n"));
 }

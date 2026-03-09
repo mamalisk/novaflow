@@ -113,6 +113,9 @@ export const NovaflowState = Annotation.Root({
 
   requiresDevOps: Annotation<boolean>({ reducer: (_, next) => next, default: () => false }),
   allTestsPassed: Annotation<boolean>({ reducer: (_, next) => next, default: () => false }),
+
+  /** Relevant KB + run-memory chunks fetched from ChromaDB before agent execution. Empty string when ChromaDB is unavailable. */
+  kbContext: Annotation<string>({ reducer: (_, next) => next, default: () => "" }),
 });
 
 export type NovaflowStateType = typeof NovaflowState.State;

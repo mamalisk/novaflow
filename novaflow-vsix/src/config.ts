@@ -64,6 +64,23 @@ export async function buildConfig(
   return { global: globalConfig, project: projectConfig };
 }
 
+/** Check ChromaDB connectivity. Never throws — returns ok:false when unavailable. */
+export async function checkChromaDB(
+  config: NovaflowConfig
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(
+      `http://${config.chromadb.host}:${config.chromadb.port}/api/v2/heartbeat`,
+      { signal: AbortSignal.timeout(3000) }
+    );
+    return res.ok
+      ? { ok: true, message: `${config.chromadb.host}:${config.chromadb.port}` }
+      : { ok: false, message: "unreachable" };
+  } catch {
+    return { ok: false, message: "not running" };
+  }
+}
+
 /** Check which integrations are healthy. */
 export async function checkIntegrations(
   config: NovaflowConfig,

@@ -1,82 +1,163 @@
 # Novaflow — Architecture & Technical Reference
 
-## Monorepo layout
+Novaflow is a self-contained VS Code extension. All agent logic, LangGraph orchestration, and UI run inside the extension host — there is no external HTTP server, no pnpm monorepo, and no Socket.io.
+
+---
+
+## Project layout
 
 ```
-novaflow/
-├── apps/
-│   ├── server/              @novaflow/server    — Next.js 15 + custom server + React UI
-│   └── vscode-extension/    novaflow-vscode     — VS Code companion extension
-├── packages/
-│   ├── agents/              @novaflow/agents    — LangGraph orchestration, all agent nodes
-│   ├── cli/                 @novaflow/cli       — npx entry point
-│   └── shared-types/        @novaflow/shared-types — zero-dep TypeScript interfaces
-├── pnpm-workspace.yaml
-├── turbo.json
-└── tsconfig.base.json
+novaflow-vsix/                       # flat npm project (not pnpm, not a monorepo)
+├── package.json
+├── tsconfig.json
+├── esbuild.mjs                      # builds extension + webview bundles
+├── .vscode/
+│   ├── launch.json                  # F5 → Extension Development Host
+│   └── tasks.json                   # npm: build pre-launch task
+├── src/
+│   ├── extension.ts                 # activate(), registers commands + status bar
+│   ├── panel.ts                     # WebviewPanel lifecycle manager
+│   ├── runner.ts                    # graph orchestration + postMessage bridge + KB management
+│   ├── config.ts                    # reads VS Code settings + SecretStorage → config objects
+│   ├── types/                       # inline copies of shared-types (no external dep)
+│   │   ├── events.ts                # NovaflowEvent discriminated union
+│   │   ├── config.ts                # NovaflowConfig, NovaflowProjectConfig
+│   │   ├── run.ts                   # RunStatus, AgentId, GateName, CheckpointDecision
+│   │   └── index.ts
+│   ├── graph/
+│   │   ├── state.ts                 # Annotation.Root typed state
+│   │   ├── graph.ts                 # StateGraph, edges, interrupt gates
+│   │   ├── event-bus.ts             # EventEmitter singleton (agentEventBus)
+│   │   ├── checkpointer.ts          # SqlJsCheckpointer (custom BaseCheckpointSaver)
+│   │   └── run-reporter.ts          # writes .novaflow/reports/ in workspace
+│   ├── nodes/                       # one file per agent node
+│   │   ├── fetch-jira.ts
+│   │   ├── business-analyst.ts
+│   │   ├── test-analyst.ts
+│   │   ├── developer.ts
+│   │   ├── devops.ts
+│   │   ├── playwright-runner.ts
+│   │   └── report-generator.ts
+│   ├── provider/
+│   │   └── model-factory.ts         # createChatModel(config) → BaseChatModel
+│   └── webview/
+│       ├── index.tsx                # React entry point
+│       ├── App.tsx                  # full UI: compose bar, event log, KB panel, status panel
+│       └── vscode.ts                # acquireVsCodeApi() wrapper
+└── dist/                            # build output (gitignored)
+    ├── extension.js                 # Node CJS bundle (~1.4 MB)
+    ├── webview.js                   # browser IIFE bundle (~244 KB)
+    └── sql-wasm.wasm                # sql.js WASM (~660 KB, copied from node_modules)
 ```
 
-**Tooling:** pnpm 9 workspaces + Turborepo 2. All packages are `"type": "module"` (ESM) except the VS Code extension (CommonJS, bundled by esbuild).
+---
 
-Build commands:
+## Build
+
 ```bash
-pnpm install          # install all workspaces
-pnpm build            # build all packages in dependency order (turbo)
-pnpm typecheck        # typecheck all packages
-pnpm --filter <name> build  # build a single package
+cd novaflow-vsix
+npm install
+npm run build         # node esbuild.mjs → dist/
+npm run watch         # node esbuild.mjs --watch
+npm run package       # build + vsce package → novaflow-vsix-*.vsix
 ```
+
+**esbuild produces two bundles:**
+
+| Input | Output | Platform | Format |
+|---|---|---|---|
+| `src/extension.ts` | `dist/extension.js` | node | CJS |
+| `src/webview/index.tsx` | `dist/webview.js` | browser | IIFE |
+
+`dist/sql-wasm.wasm` is copied from `node_modules/sql.js/dist/sql-wasm.wasm` at build time.
+
+**To launch Extension Development Host:** open `novaflow-vsix/` in VS Code and press `F5`. The build runs automatically via the `preLaunchTask`.
 
 ---
 
-## Package dependency graph
+## Architecture
 
-```
-shared-types
-    └── agents
-    └── cli
-    └── server
-            └── agents
+### Communication: postMessage
+
+The extension host and webview communicate exclusively via `panel.webview.postMessage()` / `window.addEventListener("message", ...)`. There is no HTTP server or Socket.io.
+
+**Extension → Webview:**
+
+```typescript
+{ type: "agent:event"; event: NovaflowEvent }
+{ type: "run:started"; runId: string }
+{ type: "status:update"; status: StatusResult }
+{ type: "kb:list"; files: KbFile[] }
 ```
 
-`shared-types` has no runtime dependencies. `agents` depends only on `shared-types` and LangChain. `server` depends on both `shared-types` and `agents`. `cli` depends on `shared-types` only.
+**Webview → Extension:**
+
+```typescript
+{ type: "run:start"; ticketId: string; additionalContext?: string }
+{ type: "checkpoint:respond"; decision: { action: "approved" | "rejected" | "modified" } }
+{ type: "status:request" }
+{ type: "reinitialize" }
+{ type: "kb:list" }
+{ type: "kb:create"; template: string; name?: string }
+{ type: "kb:open"; filename: string }
+{ type: "kb:delete"; filename: string }
+```
+
+### Event bus
+
+`agentEventBus` is a module-level `EventEmitter` singleton (`src/graph/event-bus.ts`). Every agent node calls `emitAgentEvent(runId, event)`. `NovaflowRunner` listens on `"agent:event"` and forwards to the webview via `postMessage`.
+
+LangGraph state must be JSON-serializable (persisted by the checkpointer). The EventEmitter singleton bridges the gap — the webview panel reference is not stored in state.
+
+### Configuration
+
+**Non-secret values** are read from VS Code workspace settings (`vscode.workspace.getConfiguration("novaflow")`).
+
+**API keys** are stored in VS Code `SecretStorage` (backed by the OS keychain):
+- `novaflow.ai.apiKey`
+- `novaflow.jira.apiToken`
+- `novaflow.gitlab.token`
+
+`buildConfig(secrets)` in `src/config.ts` merges both sources into `NovaflowConfig` + `NovaflowProjectConfig`.
+
+The **`novaflow.configure`** command (`extension.ts`) opens a quick-pick to store secrets one at a time via `context.secrets.store()`. After storing, it re-calls `runner.initialize()` so the graph reloads with the new credentials.
+
+### Checkpointer: SqlJsCheckpointer
+
+`src/graph/checkpointer.ts` implements a custom `BaseCheckpointSaver` using `sql.js` (pure-JS SQLite WASM — no native binaries, required for VS Code extension bundling).
+
+- **DB path:** `context.globalStorageUri.fsPath/novaflow.sqlite` (VS Code's per-extension storage)
+- **WASM path:** `context.extensionPath/dist/sql-wasm.wasm`
+- **Schema:** same 3-table layout as LangGraph's `SqliteSaver` (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`)
+- **Persistence:** `db.export()` → `fs.writeFileSync()` after every write
+- **`TASKS` constant:** not exported from `@langchain/langgraph` main index — hardcoded as `"__pregel_tasks"` in the checkpointer
+
+### Human-in-the-loop
+
+Three checkpoint gate nodes call `interrupt()`:
+- `baApprovalGate` — post business analysis
+- `implApprovalGate` — pre implementation
+- `commitApprovalGate` — pre commit
+
+Each gate emits a `checkpoint:required` event to the webview, which shows a `CheckpointBanner`. The user's response is sent back as `checkpoint:respond`, which calls `resumeRun()` with `graph.stream(new Command({ resume: decision }), config)`.
+
+Each gate is toggled independently via `novaflow.checkpoints.*` settings.
+
+### Knowledge base
+
+KB files are `.md` documents stored in `.novaflow/knowledge/` inside the open workspace.
+
+- `ensureKbDir()` is called on every `setPanel()` — auto-creates the directory on first panel open
+- `listKbFiles()` returns `{ name, filename }[]` sorted alphabetically
+- `kb:create` creates a file from a pre-defined template and opens it in the VS Code editor via `vscode.window.showTextDocument()`
+- `kb:open` opens an existing file in the VS Code editor
+- `kb:delete` shows a modal `showWarningMessage` confirmation before `fs.unlinkSync()`
+
+Templates defined in `runner.ts`: `architecture`, `coding-conventions`, `test-strategy`, `definition-of-done`, `custom`.
 
 ---
 
-## packages/shared-types
-
-All cross-package TypeScript interfaces live here. Zero runtime dependencies.
-
-**Critical files:**
-- `src/events.ts` — `NovaflowEvent` discriminated union; typed Socket.io event maps (`ServerToClientEvents`, `ClientToServerEvents`)
-- `src/config.ts` — `NovaflowConfig` (global) and `NovaflowProjectConfig` (per-project); `defaultNovaflowConfig()` and `defaultProjectConfig()` factories
-- `src/run.ts` — `RunStatus`, `AgentId`, `GateName`, `CheckpointDecision`
-
-`tsconfig.json` uses `"composite": true` — required for TypeScript project references from other packages.
-
----
-
-## packages/agents
-
-The LangGraph orchestration core. No HTTP server, no UI — pure agent logic.
-
-### State (`src/graph/state.ts`)
-
-The entire run's data is held in `NovaflowState`, a typed `Annotation.Root`. Key design decisions per channel:
-
-| Channel | Reducer | Purpose |
-|---|---|---|
-| `runId`, `jiraTicketId`, `figmaUrl` | overwrite | Immutable run context |
-| `baOutput`, `testPlanOutput`, `implementationOutput`, etc. | overwrite | Agent outputs (one per agent) |
-| `messages` | `messagesStateReducer` (append + dedupe by id) | LangChain message history |
-| `events` | append | Event log for WebSocket streaming |
-| `pendingCheckpoint`, `checkpointDecision`, `checkpointPayload` | overwrite | Human-in-the-loop state |
-| `requiresDevOps`, `allTestsPassed` | overwrite | Conditional routing flags |
-
-State must remain JSON-serializable — it is persisted by SqliteSaver on every node transition.
-
-### Graph (`src/graph/graph.ts`)
-
-Built with `StateGraph` from `@langchain/langgraph`. Full node and edge wiring:
+## Agent pipeline
 
 ```
 START → fetchJira → businessAnalyst → [baApprovalGate]
@@ -84,245 +165,63 @@ START → fetchJira → businessAnalyst → [baApprovalGate]
                                        testAnalyst → [implApprovalGate]
                                                           ↓ approved
                                                       developer
-                                                          ↓ (conditional)
-                                              devopsAgent → playwrightRunner
-                                              playwrightRunner → [commitApprovalGate]
-                                                                      ↓ approved
-                                                                  reportGenerator → END
+                                                          ↓ (conditional if requiresDevOps)
+                                              devopsAgent ┐
+                                                          ↓
+                                                  playwrightRunner → [commitApprovalGate]
+                                                                          ↓ approved
+                                                                      reportGenerator → END
 ```
 
-Rejected checkpoints at `baApprovalGate` retry the BA node. Rejected at `implApprovalGate` or `commitApprovalGate` go to END.
-
-**`buildGraph(llm, projectConfig)`** returns a compiled graph. Call `setCompiledGraph()` once at server startup. `getCompiledGraph()` is used by the API routes.
-
-**`startRun(params)`** fires `graph.stream(initialState, config)` asynchronously. Note: `graph.stream()` in LangGraph v1 returns a `Promise<AsyncIterable>` — it must be `await`-ed before iterating.
-
-**`resumeRun(runId, decision)`** fires `graph.stream(new Command({ resume: decision }), config)` to resume from an `interrupt()`.
-
-### Human-in-the-loop (`interrupt()`)
-
-Three configured checkpoint gate nodes wrap `interrupt()`:
-- `baApprovalGate` — post business analysis
-- `implApprovalGate` — pre implementation
-- `commitApprovalGate` — pre commit
-
-Each gate node emits a `checkpoint:required` event to the UI before calling `interrupt()`. The graph suspends and its state is persisted by SqliteSaver. When the user approves or rejects via the UI, the `/api/checkpoint` route calls `resumeRun()` with a `Command({ resume: decision })`.
-
-Ad-hoc uncertainty: the `developerNode` calls `interrupt()` directly when its confidence score falls below 0.7 and `allowAgentUncertaintyPause` is enabled.
-
-### Event bus (`src/graph/event-bus.ts`)
-
-A module-level `EventEmitter` singleton (`agentEventBus`). Every agent node calls `emitAgentEvent(runId, event)` to broadcast progress.
-
-**Why not use LangGraph state for events?** State is persisted by SqliteSaver — it must be JSON-serializable. The Socket.io `io` object is not serializable. The EventEmitter singleton decouples the two: agents emit into it, `socket-server.ts` in the Next.js app listens and forwards to Socket.io.
-
-Events emitted: `"agent:event"` `{ runId, event }` and `"run:status"` `{ runId, status }`. Inbound from socket: `"checkpoint:respond"` `{ runId, decision }`.
-
-### Checkpointer (`src/graph/checkpointer.ts`)
-
-`SqliteSaver.fromConnString("~/.novaflow/.novaflow-sqlite")` — a file-backed SQLite database that persists all run state. This means:
-- Runs survive server restarts
-- The graph can be resumed after a crash
-- Run history is queryable
-
-`MemorySaver` is intentionally not used — it would lose all state on server restart.
-
-### AI provider abstraction (`src/provider/model-factory.ts`)
-
-`createChatModel(config): Promise<BaseChatModel>` lazy-imports the provider package at runtime using dynamic `import()`. This avoids bundling all provider SDKs when only one is needed.
-
-Provider packages are declared as optional `peerDependencies`. The `init` wizard is responsible for installing the chosen provider's package.
-
-All agent nodes receive a `BaseChatModel` and never reference a specific provider. Structured outputs use `llm.withStructuredOutput(zodSchema)` — no raw text parsing.
+Rejected at `baApprovalGate` retries `businessAnalyst`. Rejected at `implApprovalGate` or `commitApprovalGate` goes to END.
 
 ### Node pattern
 
-Every node is a factory function: `createXxxNode(llm, config?) => async (state) => Partial<state>`.
+Every node is a factory: `createXxxNode(llm, config?) => async (state) => Partial<NovaflowStateType>`.
 
-Node responsibilities:
 1. Emit `agent:started`
-2. Emit `agent:thinking` messages during work
-3. Invoke LLM via `ChatPromptTemplate.pipe(llm.withStructuredOutput(schema))`
-4. Write outputs to filesystem if needed (developer, devops nodes)
+2. Emit `agent:thinking` during work
+3. Invoke LLM via `ChatPromptTemplate.pipe(llm.withStructuredOutput(zodSchema))`
+4. Write files to workspace if needed (developer, devops nodes)
 5. Emit `agent:completed` or `agent:error`
 6. Return `Partial<NovaflowStateType>`
 
-### LangChain version constraint
+### Additional context
 
-**All LangChain packages must be v1.x.** `@langchain/langgraph-checkpoint-sqlite@^1.0` requires `@langchain/core@^1.x` and `@langchain/langgraph@^1.x`. The v0.3/v0.2 ecosystem is incompatible with the current checkpoint package.
+`additionalContext` is an optional string passed from the webview compose bar. It is carried in graph state and appended to the prompts of `businessAnalyst`, `testAnalyst`, and `developer` nodes, giving the user a way to inject constraints or architectural decisions.
+
+---
+
+## AI provider abstraction
+
+`createChatModel(config)` in `src/provider/model-factory.ts` lazily imports the provider package at runtime:
+
+| `provider` | Package |
+|---|---|
+| `anthropic` | `@langchain/anthropic` |
+| `openai` | `@langchain/openai` |
+| `azure-openai` | `@langchain/openai` |
+| `ollama` | `@langchain/ollama` |
+
+All nodes receive a `BaseChatModel` — never a concrete provider type.
+
+**Azure AI Foundry:** pass the Azure endpoint as `novaflow.ai.baseUrl`. The Anthropic SDK uses it as `anthropicApiUrl`. Azure expects the subscription key in `x-api-key` (same header Anthropic uses — no special handling needed).
+
+---
+
+## Critical package versions
 
 ```json
 "@langchain/core": "^1.1.28",
 "@langchain/langgraph": "^1.1.5",
-"@langchain/langgraph-checkpoint-sqlite": "^1.0.1"
+"@langchain/anthropic": "^1.3.20",
+"@langchain/openai": "^1.0.0",
+"@langchain/ollama": "^1.0.0"
 ```
 
----
+All LangChain packages must be **v1.x**. The v0.3/v0.2 ecosystem is incompatible with the sql.js checkpointer and `@langchain/langgraph@^1.x`.
 
-## apps/server
-
-### Custom server entry (`server.ts`)
-
-Next.js App Router does not expose the raw `http.Server` to route handlers. A custom server entry (`server.ts`) starts Next.js programmatically with `next({ dev })` and attaches Socket.io to the same `http.Server`. Both share a single port.
-
-The custom server also reads config files and calls `initAgents(globalConfig, projectConfig)` at startup to build and register the compiled LangGraph graph. `initAgents()` is wrapped in try/catch — if it fails (e.g. AI provider package not installed), the server still starts so the UI and `/api/status` remain reachable.
-
-The loaded config is stored on `global.__novaflowLoadedConfig` so the `/api/status` route can access it without re-reading files. The compiled graph is stored on `global.__novaflowCompiledGraph` (see event-bus global singleton pattern below).
-
-`next.config.ts` does **not** use `output: "standalone"` — standalone mode is incompatible with custom servers and causes symlink failures on Windows with pnpm.
-
-Start: `node --loader ts-node/esm server.ts` (both dev and production for now).
-
-### Socket.io (`src/lib/socket-server.ts`)
-
-`initSocketServer(io)` does two things:
-1. Registers Socket.io connection handlers — clients join a run's room via `run:subscribe`, respond to checkpoints via `checkpoint:respond`
-2. Bridges the `agentEventBus` EventEmitter to Socket.io: `agentEventBus.on("agent:event")` → `io.to(runId).emit("agent:event")`
-
-The typed Socket.io interface uses the `ServerToClientEvents` / `ClientToServerEvents` types from `@novaflow/shared-types`.
-
-### API routes
-
-| Route | Method | Purpose |
-|---|---|---|
-| `/api/run` | POST | Starts a run: calls `startRun()` fire-and-forget, returns `{ runId }`. Returns 503 if graph not initialized. |
-| `/api/checkpoint` | POST | Resumes a paused run: calls `resumeRun(runId, decision)` |
-| `/api/health` | GET | Health check for VS Code extension polling |
-| `/api/status` | GET | Returns per-integration connection status (`graphInitialized`, `ai`, `jira`, `gitlab`, `figma`) |
-
-Both `startRun` and `resumeRun` are invoked with `void` — the caller does not await them. Events flow back to the client via Socket.io.
-
-`/api/status` reads `global.__novaflowLoadedConfig` (set by `server.ts` at startup) and calls `checkIntegrations()` from `@novaflow/agents`. Each integration is tested with a live HTTP call (JIRA `/rest/api/3/myself`, GitLab `/api/v4/user`, Figma `/v1/me`). The AI check verifies the provider package is installed and the API key is non-empty. Results are `{ ok: boolean, message: string }` per integration.
-
-### React UI (`src/app/page.tsx`)
-
-A single-page client component. State: ticket ID input, run ID, event log, active checkpoint. The Socket.io client connects on mount and joins the run's room after `POST /api/run` returns.
-
-Checkpoint approval/rejection posts to `/api/checkpoint` directly (HTTP, not Socket.io) to ensure reliable delivery.
-
----
-
-## apps/vscode-extension
-
-A thin companion extension. Its only job: open a `WebviewPanel` that embeds the Novaflow server URL.
-
-### Key settings on `WebviewPanel`
-
-- `retainContextWhenHidden: true` — prevents the Socket.io connection and React state from being destroyed when the user switches tabs. Without this, every tab switch breaks the live event log.
-- `portMapping: [{ extensionHostPort: PORT, webviewPort: PORT }]` — maps the localhost port into the webview's sandboxed network context.
-- CSP `frame-src http://localhost:PORT` — explicitly allows the iframe to load from localhost.
-
-### Server readiness
-
-The webview HTML polls `/api/health` every 2 seconds (up to 30 attempts) before showing the iframe. This handles the race between opening the panel and the server finishing its boot.
-
-### Commands registered
-
-| Command | Action |
-|---|---|
-| `novaflow.openPanel` | Opens or reveals the WebviewPanel |
-| `novaflow.startServer` | Creates a terminal, runs `npx novaflow start`, then opens the panel after 3s |
-
----
-
-## packages/cli
-
-Entry point: `src/index.ts` — Commander.js with three commands.
-
-### `novaflow init`
-
-Interactive wizard using `@inquirer/prompts` (the modern modular replacement for inquirer). Writes:
-- `~/.novaflow/config.json` — global config (AI, server, ChromaDB)
-- `.novaflow/project.json` — project config (JIRA, GitLab, Figma, permissions)
-- `.novaflow/knowledge/` — empty directory, ready for project documents
-
-### `novaflow start`
-
-Spawns the `@novaflow/server` process via `execa`, passing `NOVAFLOW_PORT` and `NOVAFLOW_HOST` as environment variables.
-
-### `novaflow run`
-
-Fire-and-forget HTTP `POST /api/run` to a running server. Returns a run ID. Intended for CI or headless automation.
-
----
-
-## Configuration architecture
-
-Two-level config:
-
-**Global** (`~/.novaflow/config.json`) — shared across all projects on this machine. Holds AI provider credentials and server settings. Sensitive values should eventually be stored in the OS keychain via `keytar`; the config would then hold `"__keychain__"` as a placeholder.
-
-**Project** (`.novaflow/project.json`) — committed to the project repo (without tokens). Holds integration URLs, checkpoint toggles, and knowledge base document registry.
-
-**Knowledge base** (`.novaflow/knowledge/*.md`) — Markdown documents ingested into ChromaDB at startup. Each document is chunked (1000 tokens, 200 overlap), embedded, and stored in a named collection. Agents query this before each LLM invocation to retrieve relevant project context.
-
----
-
-## Agent pipeline — detailed flow
-
-```
-1. fetchJira
-   - Fetches ticket from JIRA REST API v3
-   - Parses Atlassian Document Format (ADF) description to plain text
-   - Extracts acceptance criteria heuristically (lines after "Acceptance Criteria" heading)
-   - Sets state.jiraTicket
-
-2. businessAnalyst
-   - Prompt: ticket summary, description, AC, Figma URL, KB context
-   - withStructuredOutput(BAOutputSchema): summary, AC, affectedComponents, risks,
-     requiresDevOps, figmaReferences, clarifications, confidence
-   - Sets state.baOutput, state.requiresDevOps
-
-3. [baApprovalGate]
-   - interrupt() suspends graph; emits checkpoint:required to UI
-   - Resumed by /api/checkpoint with { action: "approved" | "rejected" }
-   - Rejected → retry businessAnalyst
-
-4. testAnalyst
-   - Prompt: BA output (summary, AC, components, risks)
-   - withStructuredOutput(TestPlanSchema): automatedTests[], manualTests[],
-     automationRecommendations[]
-   - Sets state.testPlanOutput
-
-5. [implApprovalGate]
-   - Same interrupt pattern; rejected → END
-
-6. developer
-   - Prompt: BA summary, AC, affected components, automated test specs
-   - withStructuredOutput(ImplementationSchema): changes[], summary, confidence, uncertainties
-   - If confidence < 0.7 AND allowAgentUncertaintyPause: calls interrupt() ad-hoc
-   - Writes changed files to disk (mkdirSync + writeFileSync)
-   - Emits file:changed events with simple line-diff for each file
-   - Sets state.implementationOutput (includes branchName)
-
-7. devopsAgent (conditional — only if state.requiresDevOps)
-   - Prompt: implementation summary + changed files
-   - Writes CI/CD YAML changes to disk
-   - Sets state.devopsOutput
-
-8. playwrightRunner
-   - Shells out: execSync("npx playwright test --reporter=json")
-   - Parses JSON output for pass/fail counts and per-test results
-   - Emits test:result events
-   - Sets state.testResults, state.allTestsPassed
-
-9. [commitApprovalGate]
-   - Shows implementation changes and test results; rejected → END
-
-10. reportGenerator
-    - Assembles FinalReport from all agent outputs
-    - Emits run:completed with reportUrl
-    - Sets state.finalReport, state.status = "completed"
-```
-
----
-
-## What is not yet implemented (Phase 2+)
-
-- **ChromaDB knowledge base** — `KnowledgeBase` class exists as a sketch; ingestion and query are not wired into agent prompts yet
-- **GitLab integration** — `tools/gitlab.ts` stub; branch creation, file commit, and MR opening not implemented
-- **Figma fetching** — `figmaDesigns` in state is always `[]`; Figma REST API calls not yet added to `fetchJira` node
-- **JIRA comment** — posting MR link back to JIRA ticket not implemented
-- **API key keychain** — `keytar` is installed but not yet used; API keys are stored in plaintext in config JSON
-- **Report UI** — `/report/[runId]` route not yet built; `reportUrl` points to a 404
-- **IntelliJ plugin** — deferred (requires Kotlin + JCEF)
+**LangGraph API notes:**
+- `graph.stream()` returns a `Promise<AsyncIterable>` — must `await` before `for await…of`
+- Resume a paused run: `graph.stream(new Command({ resume: decision }), config)`
+- `interrupt()` is imported from `@langchain/langgraph`

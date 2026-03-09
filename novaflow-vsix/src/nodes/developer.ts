@@ -72,7 +72,7 @@ Affected Components:
 {affectedComponents}
 
 Automated Tests to Pass:
-{automatedTests}{additionalContext}
+{automatedTests}{kbContext}{additionalContext}
 
 Provide the complete implementation.`,
         ],
@@ -87,6 +87,9 @@ Provide the complete implementation.`,
         automatedTests: state.testPlanOutput.automatedTests
           .map((t) => `- ${t.name}: ${t.description}`)
           .join("\n"),
+        kbContext: state.kbContext
+          ? `\n\n## Project Context\n${state.kbContext}`
+          : "",
         additionalContext: state.additionalContext
           ? `\n\nAdditional Specifications:\n${state.additionalContext}`
           : "",

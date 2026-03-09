@@ -1,316 +1,172 @@
 # Novaflow
 
-An AI-first development tool. Give it a JIRA ticket — it produces a business analysis, test plan, implementation, and GitLab MR, with human approval checkpoints throughout.
+An AI-first development tool delivered as a self-contained VS Code extension. Give it a JIRA ticket — it produces a business analysis, test plan, implementation, and GitLab MR, with human approval checkpoints throughout.
 
 ---
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9+ (`npm install -g pnpm`)
-- A running [ChromaDB](https://docs.trychroma.com/getting-started) instance (default: `localhost:8000`)
+- VS Code 1.85+
+- Node.js 20+ (for building from source)
 - An AI provider API key (Anthropic, OpenAI, Azure OpenAI, or a local Ollama instance)
+- JIRA and GitLab credentials
 
 ---
 
 ## Installation
 
-> **Running locally from source?** Build the CLI first, then use `pnpm novaflow` instead of `npx novaflow` throughout this guide:
-> ```bash
-> pnpm --filter @novaflow/cli build
-> pnpm novaflow init
-> ```
+### From the VS Code Marketplace
 
-Once published to npm, use `npx` directly:
+Search for **Novaflow** in the Extensions view (`Ctrl+Shift+X`) and install.
+
+### From source (`.vsix` package)
 
 ```bash
-npx novaflow init
+git clone <repo>
+cd novaflow/novaflow-vsix
+npm install
+npm run package       # produces novaflow-vsix-*.vsix
 ```
 
-This runs the interactive setup wizard. You will be asked for:
+Install the `.vsix`:
 
-- **AI provider** — Anthropic, OpenAI, Azure OpenAI, or Ollama
-- **Model name** — e.g. `claude-opus-4-6`, `gpt-4o`
-- **API key** for your chosen provider
-- **JIRA** — base URL, email, and API token
-- **GitLab** — base URL, personal access token, project ID, default branch
-- **Figma** — access token (optional)
-- **Server port** — default `3847`
-- **ChromaDB** host and port
-- **Approval checkpoints** — whether to pause after BA, before implementation, and before commit
+```bash
+code --install-extension novaflow-vsix-*.vsix
+```
 
-Two config files are created:
-
-| File | Purpose |
-|---|---|
-| `~/.novaflow/config.json` | Global settings (AI provider, server port, ChromaDB) |
-| `.novaflow/project.json` | Project-specific settings (JIRA, GitLab, Figma, checkpoints) |
-
-A `.novaflow/knowledge/` directory is also created — drop project documents in here (see [Knowledge Base](#knowledge-base)).
+Or via the Extensions view: **⋯ → Install from VSIX…**
 
 ---
 
-## Starting the server
+## First-time setup
 
-```bash
-npx novaflow start
-```
+### 1. Configure API keys
 
-The server starts at `http://localhost:3847` (or whichever port you configured). Open it in your browser to use the UI.
+Open the Command Palette (`Ctrl+Shift+P`) → **Novaflow: Configure API Keys**
 
----
+This stores secrets using VS Code's built-in `SecretStorage` (OS keychain-backed). You will be prompted for:
 
-## VS Code integration
+- **AI API Key** — Anthropic, OpenAI, or Azure subscription key
+- **JIRA API Token** — Atlassian API token
+- **GitLab Access Token** — personal access token
 
-Install the **Novaflow** VS Code extension. Once installed:
+### 2. Configure settings
 
-1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **Novaflow: Open**
+Open VS Code Settings (`Ctrl+,`) and search for `novaflow`. Key settings:
 
-This opens the Novaflow UI inside VS Code as a side panel — no browser needed. If the server is not yet running, use **Novaflow: Start Server** from the Command Palette instead; it opens a terminal and starts the server automatically.
+| Setting | Default | Description |
+|---|---|---|
+| `novaflow.ai.provider` | `anthropic` | `anthropic` \| `openai` \| `azure-openai` \| `ollama` |
+| `novaflow.ai.model` | `claude-opus-4-6` | Model name / Azure deployment name |
+| `novaflow.ai.baseUrl` | _(empty)_ | Azure AI Foundry endpoint or Ollama URL |
+| `novaflow.ai.temperature` | `0.2` | LLM temperature |
+| `novaflow.jira.baseUrl` | _(empty)_ | e.g. `https://myorg.atlassian.net` |
+| `novaflow.jira.email` | _(empty)_ | JIRA account email |
+| `novaflow.jira.project` | _(empty)_ | Default JIRA project key (e.g. `PROJ`) |
+| `novaflow.gitlab.baseUrl` | _(empty)_ | GitLab base URL |
+| `novaflow.gitlab.projectId` | _(empty)_ | GitLab project ID |
+| `novaflow.gitlab.defaultBranch` | `main` | Base branch for MRs |
+| `novaflow.checkpoints.afterBA` | `true` | Pause for approval after business analysis |
+| `novaflow.checkpoints.beforeImpl` | `true` | Pause for approval before implementation |
+| `novaflow.checkpoints.beforeCommit` | `true` | Pause for approval before committing |
 
-The status bar shows a **Novaflow** item in the bottom-right corner as a quick shortcut.
+### 3. Open the panel
 
----
+Command Palette → **Novaflow: Open**
 
-## ChromaDB
-
-Novaflow uses [ChromaDB](https://docs.trychroma.com) as its vector database for the knowledge base.
-
-### Running ChromaDB
-
-**Docker / Podman (recommended)**
-
-```bash
-podman run -d \
-  --name chromadb \
-  -p 8000:8000 \
-  -v ~/.novaflow/chromadb:/chroma/chroma \
-  chromadb/chroma
-```
-
-Verify it is running:
-
-```bash
-curl http://localhost:8000/api/v2/heartbeat
-# → {"nanosecond heartbeat": ...}
-```
-
-To start it again after a reboot: `podman start chromadb`
-
-> **Version note:** ChromaDB 0.6 and above uses the `/api/v2` REST path. If you see a `"please use v2"` message in responses, you are on a recent version — this is expected and supported.
-
----
-
-### Configuration
-
-Set the host and port in `~/.novaflow/config.json` under the `chromadb` key:
-
-```json
-{
-  "chromadb": {
-    "host": "localhost",
-    "port": 8000,
-    "collectionPrefix": "novaflow"
-  }
-}
-```
-
-The `novaflow init` wizard prompts for these values automatically.
-
----
-
-### Dev container / remote development
-
-If you run Novaflow **inside a VS Code dev container**, `localhost` resolves to the container itself — not your host machine where ChromaDB is running. Use `host.docker.internal` instead:
-
-```json
-{
-  "chromadb": {
-    "host": "host.docker.internal",
-    "port": 8000,
-    "collectionPrefix": "novaflow"
-  }
-}
-```
-
-On Linux-based dev containers where `host.docker.internal` is not automatically available, find the host gateway IP:
-
-```bash
-# Inside the dev container
-ip route | grep default
-# → default via 172.17.0.1 ...  ← use this IP as the host
-```
-
----
-
-### Persisting data
-
-The `-v ~/.novaflow/chromadb:/chroma/chroma` volume mount stores the vector database on your host machine. The data survives container restarts and image updates.
-
-To make ChromaDB start automatically on login (Linux / systemd):
-
-```bash
-podman generate systemd --new --name chromadb > ~/.config/systemd/user/chromadb.service
-systemctl --user daemon-reload
-systemctl --user enable --now chromadb
-```
+The status bar shows a **$(robot) Novaflow** item as a quick shortcut.
 
 ---
 
 ## Running a ticket
 
-### From the UI
-
-1. Open the Novaflow panel (browser or VS Code)
-2. Enter a JIRA ticket ID (e.g. `PROJ-123`) in the sidebar
-3. Click **Start Run**
-4. Watch the live event log as agents work through the pipeline
-
-### From the CLI (headless)
-
-```bash
-npx novaflow run --ticket PROJ-123
-npx novaflow run --ticket PROJ-123 --figma https://figma.com/file/...
-```
-
-The server must already be running. The CLI prints the run ID and a link to the UI.
+1. Open the Novaflow panel
+2. Enter a JIRA ticket ID (e.g. `PROJ-123`) in the compose bar
+3. Optionally add implementation notes (constraints, architecture decisions, context)
+4. Click **Start Run**
+5. Watch the live event log as agents work through the pipeline
 
 ---
 
 ## Approval checkpoints
 
-When a checkpoint is enabled, the workflow pauses and a banner appears in the UI showing the agent's output. You can:
+When a checkpoint is enabled, the workflow pauses and a banner appears showing the agent's output. You can:
 
 - **Approve** — continue to the next stage
 - **Reject** — the agent retries (BA stage) or the run is cancelled
+- **Modify** — approve with changes
 
-Agents can also pause on their own when uncertain, showing their specific question in the same checkpoint UI.
+Agents can also pause on their own when uncertain, asking a specific question in the same checkpoint UI.
 
-Checkpoints are configured per-project in `.novaflow/project.json` under `permissions.checkpoints`.
+Checkpoints are toggled via VS Code settings (`novaflow.checkpoints.*`).
 
 ---
 
 ## Knowledge base
 
-Place Markdown documents in `.novaflow/knowledge/` to give agents awareness of your project's conventions, architecture, and standards.
+The extension auto-creates `.novaflow/knowledge/` in your workspace the first time the panel opens. Place Markdown documents here to give agents awareness of your project's conventions, architecture, and standards.
 
-Typical documents:
+### Managing knowledge files
+
+The **Knowledge Base** section in the panel sidebar lets you:
+
+- **View** all `.md` files in `.novaflow/knowledge/`
+- **Create** new files from pre-built templates:
+  - Architecture
+  - Coding Conventions
+  - Test Strategy
+  - Definition of Done
+  - Custom
+- **Open** any file in the VS Code editor
+- **Delete** a file (with confirmation)
+
+### Typical structure
 
 ```
 .novaflow/knowledge/
 ├── architecture.md
 ├── coding-conventions.md
 ├── test-strategy.md
-├── definition-of-ready.md
 ├── definition-of-done.md
-├── git-strategy.md
-├── nfr.md
-└── component-library.md
+└── custom.md
 ```
-
-Register each document in `.novaflow/project.json` under `knowledgeBase.documents`. With `autoIngestOnStart: true`, they are loaded into ChromaDB each time the server starts.
 
 ---
 
-## Configuration reference
+## Azure AI Foundry (Anthropic via Azure)
 
-### `~/.novaflow/config.json`
+If your organisation routes Claude through Azure AI Foundry:
 
-```jsonc
-{
-  "version": "1",
-  "ai": {
-    "provider": "anthropic",       // "anthropic" | "openai" | "azure-openai" | "ollama"
-    "model": "claude-opus-4-6",
-    "apiKey": "sk-ant-...",
-    "baseUrl": "",                 // required for azure-openai and ollama
-    "temperature": 0.2
-  },
-  "server": {
-    "port": 3847,
-    "host": "localhost"
-  },
-  "chromadb": {
-    "host": "localhost",
-    "port": 8000,
-    "collectionPrefix": "novaflow"
-  }
-}
-```
+1. Set `novaflow.ai.provider` to `anthropic`
+2. Set `novaflow.ai.model` to your Azure deployment name
+3. Set `novaflow.ai.baseUrl` to your Azure endpoint (e.g. `https://xxx.eastus.models.ai.azure.com`)
+4. Run **Novaflow: Configure API Keys** → **AI API Key** → enter your Azure subscription key
 
-### `.novaflow/project.json`
+---
 
-```jsonc
-{
-  "version": "1",
-  "projectName": "my-project",
-  "jira": {
-    "baseUrl": "https://mycompany.atlassian.net",
-    "email": "dev@mycompany.com",
-    "apiToken": "...",
-    "defaultProject": "PROJ"
-  },
-  "gitlab": {
-    "baseUrl": "https://gitlab.com",
-    "personalAccessToken": "...",
-    "projectId": "123",
-    "defaultBranch": "main",
-    "branchPrefix": "novaflow/",
-    "commitMessageTemplate": "{ticketId}: {summary}"
-  },
-  "figma": {
-    "accessToken": "..."
-  },
-  "permissions": {
-    "checkpoints": {
-      "afterBusinessAnalysis": true,
-      "beforeImplementation": true,
-      "beforeCommit": true
-    },
-    "allowAgentUncertaintyPause": true
-  },
-  "knowledgeBase": {
-    "autoIngestOnStart": true,
-    "documents": [
-      {
-        "id": "arch",
-        "path": "architecture.md",
-        "type": "architecture",
-        "description": "System architecture overview"
-      }
-    ]
-  }
-}
-```
+## Run state and history
+
+Run state is persisted in a local SQLite database (`novaflow.sqlite`) stored in VS Code's per-extension global storage directory. Runs survive VS Code restarts and can be resumed after a crash.
 
 ---
 
 ## Building from source
 
 ```bash
-git clone <repo>
-cd novaflow
-pnpm install
-pnpm build
+cd novaflow-vsix
+npm install
+npm run build        # produces dist/extension.js + dist/webview.js + dist/sql-wasm.wasm
 ```
 
-Then use `pnpm novaflow <command>` in place of `npx novaflow <command>`:
+To launch an Extension Development Host:
+
+1. Open the `novaflow-vsix/` folder in VS Code
+2. Press `F5`
+
+The build runs automatically before the Extension Development Host starts.
+
+To package a `.vsix`:
 
 ```bash
-pnpm novaflow init
-pnpm novaflow start
-pnpm novaflow run --ticket PROJ-123
-```
-
-To run the server in development mode (with watch):
-
-```bash
-pnpm --filter @novaflow/server dev
-```
-
-To build the VS Code extension:
-
-```bash
-pnpm --filter novaflow-vscode build
+npm run package
 ```

@@ -60,7 +60,7 @@ export function createTestAnalystNode(llm: BaseChatModel) {
 Summary: {summary}
 Acceptance Criteria: {acceptanceCriteria}
 Affected Components: {affectedComponents}
-Risks: {risks}{additionalContext}`,
+Risks: {risks}{kbContext}{additionalContext}`,
         ],
       ]);
 
@@ -71,6 +71,9 @@ Risks: {risks}{additionalContext}`,
         acceptanceCriteria: state.baOutput.acceptanceCriteria.join("\n"),
         affectedComponents: state.baOutput.affectedComponents.join(", "),
         risks: state.baOutput.risks.join("\n"),
+        kbContext: state.kbContext
+          ? `\n\n## Project Context\n${state.kbContext}`
+          : "",
         additionalContext: state.additionalContext
           ? `\n\nAdditional Specifications:\n${state.additionalContext}`
           : "",

@@ -58,11 +58,15 @@ Acceptance Criteria: {acceptanceCriteria}
 Priority: {priority}
 Labels: {labels}
 Components: {components}
-Figma URL: {figmaUrl}{additionalContext}`,
+Figma URL: {figmaUrl}{kbContext}{additionalContext}`,
         ],
       ]);
 
       const chain = prompt.pipe(llm.withStructuredOutput(BAOutputSchema));
+
+      const kbContextSection = state.kbContext
+        ? `\n\n## Project Context\n${state.kbContext}`
+        : "";
 
       const contextSection = state.additionalContext
         ? `\n\nAdditional Specifications:\n${state.additionalContext}`
@@ -77,6 +81,7 @@ Figma URL: {figmaUrl}{additionalContext}`,
         labels: state.jiraTicket.labels.join(", "),
         components: state.jiraTicket.components.join(", "),
         figmaUrl: state.figmaUrl ?? "None provided",
+        kbContext: kbContextSection,
         additionalContext: contextSection,
       }) as BAOutput;
 
